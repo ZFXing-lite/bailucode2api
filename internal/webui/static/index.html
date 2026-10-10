@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bailucode2api · 账号管理</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:1180px;margin:24px auto;padding:0 16px;background:#0f1420;color:#e8ecf4}
+h1{font-size:20px}h2{font-size:16px;margin-top:28px}
+.card{background:#182031;border:1px solid #2a3550;border-radius:10px;padding:16px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px;border-bottom:1px solid #2a3550;text-align:left}
+th{color:#8fa0bf;font-weight:600}
+textarea{width:100%;height:120px;background:#0f1420;color:#e8ecf4;border:1px solid #2a3550;border-radius:8px;padding:8px;font-family:monospace}
+button{background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;margin-right:8px}
+button.danger{background:#ef4444}button.ghost{background:#2a3550}
+button:disabled{opacity:.5;cursor:wait}
+input{background:#0f1420;color:#e8ecf4;border:1px solid #2a3550;border-radius:8px;padding:8px}
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;background:#2a3550}
+.badge.active{background:#14532d}.badge.pending_key{background:#713f12}.badge.error{background:#7f1d1d}
+#login{max-width:360px;margin:80px auto}
+pre{white-space:pre-wrap;font-size:12px;color:#9fb3d9}
+.slot{font-size:11px;color:#9fb3d9}
+.slot b{color:#4ade80}
+.q{font-size:11px;line-height:1.5}
+.q .used{color:#fbbf24}.q .remain{color:#4ade80}.q .credit{color:#8fa0bf}
+.q .pack{color:#60a5fa}
+.sum{display:flex;gap:24px;margin-top:10px;flex-wrap:wrap}
+.sum div{font-size:13px}
+.sum b{display:block;font-size:18px;color:#4ade80}
+.mono{font-family:monospace}
+</style>
+</head>
+<body>
+<div id="login" class="card" style="display:none">
+  <h2>管理员登录</h2>
+  <input id="u" placeholder="用户名" style="width:100%;margin-bottom:8px"><br>
+  <input id="p" type="password" placeholder="密码" style="width:100%;margin-bottom:8px"><br>
+  <button onclick="doLogin()">登录</button>
+  <pre id="loginMsg"></pre>
+</div>
+<div id="app" style="display:none">
+  <h1>🐾 bailucode2api</h1>
+  <div class="card"><b>账号池</b> <span id="poolStat"></span>
+    <button class="ghost" onclick="runCheckin()" id="btnAll" style="float:right;margin-left:8px">立即签到（全账号）</button>
+    <button class="ghost" onclick="refreshAllQuota()" id="btnQuota" style="float:right">刷新全部额度</button>
+    <div class="sum">
+      <div>总量 Tokens<b id="sumTotal">-</b></div>
+      <div>剩余 Tokens<b id="sumRemain">-</b></div>
+      <div>已用 Tokens<b id="sumUsed" style="color:#fbbf24">-</b></div>
+      <div>美元额度<b id="sumCredit" style="color:#8fa0bf">-</b></div>
+    </div>
+    <div style="margin-top:6px;font-size:12px;color:#8fa0bf">Turnstile 求解器：<span id="solverInfo">-</span> ｜ 上游：<span id="upstreamInfo" class="mono">-</span></div>
+  </div>
+  <h2>用量统计</h2>
+  <div class="card">
+    <div class="sum">
+      <div>总 Tokens<b id="stTotalTok">0</b></div>
+      <div>今日 Tokens<b id="stTodayTok">0</b></div>
+      <div>总请求<b id="stTotalReq">0</b></div>
+      <div>今日请求<b id="stTodayReq">0</b></div>
+    </div>
+    <details style="margin-top:10px"><summary style="cursor:pointer;color:#8fa0bf">按日明细（近 14 天）</summary>
+      <table style="margin-top:8px"><thead><tr><th>日期</th><th>请求</th><th>输入 Tokens</th><th>输出 Tokens</th><th>合计</th></tr></thead><tbody id="stDaily"></tbody></table>
+    </details>
+  </div>
+  <h2>下游 API Keys</h2>
+  <div class="card">
+    <input id="keyName" placeholder="备注名（如：LobeChat / 沉浸式翻译）" style="width:40%">
+    <input id="keySecret" placeholder="自定义 Key（留空自动生成）" style="width:40%;margin-left:8px">
+    <button onclick="createKey()">生成 Key</button>
+    <div style="font-size:11px;color:#8fa0bf;margin-top:6px">调用方以 Authorization: Bearer <Key> 访问 /v1/*；Key 明文仅创建时显示一次。未创建任何 Key 且未设置 API_KEY 环境变量时网关为开放模式。</div>
+    <table style="margin-top:10px">
+      <thead><tr><th>名称</th><th>Key</th><th>状态</th><th>请求数</th><th>Tokens（入/出）</th><th>创建时间</th><th>操作</th></tr></thead>
+      <tbody id="keyRows"></tbody>
+    </table>
+    <pre id="keyMsg"></pre>
+  </div>
+  <h2>导入账号</h2>
+  <div class="card">
+    <textarea id="importText" placeholder="email----password----apikey&#10;email----password   （无 key 时为待补充状态；密码用于控制台登录、自动签到与额度查询）"></textarea><br><br>
+    <button onclick="doImport()">导入</button>
+    <pre id="importMsg"></pre>
+  </div>
+  <h2>账号列表</h2>
+  <div class="card"><table>
+    <thead><tr><th>邮箱</th><th>状态</th><th>API Key</th><th>额度</th><th>今日签到</th><th>成功/失败</th><th>操作</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <div class="card" style="font-size:12px;color:#8fa0bf">
+    网关用法：<code class="mono">curl http://localhost:18790/v1/chat/completions -H "Authorization: Bearer $API_KEY" -d '{"model":"...","messages":[...]}'</code>
+  </div>
+</div>
+<script>
+async function api(path, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  const r = await fetch(path, opts);
+  if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+function showLogin(){ document.getElementById('login').style.display='block'; document.getElementById('app').style.display='none'; }
+function fmt(n){ return Math.round(n||0).toLocaleString(); }
+function fmtTime(v){
+  if (!v || v.startsWith('0001')) return '-';
+  return v.slice(5,16).replace('T',' ');
+}
+async function doLogin(){
+  const r = await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username:document.getElementById('u').value,password:document.getElementById('p').value})});
+  if(!r.ok){ document.getElementById('loginMsg').textContent='登录失败'; return; }
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  refresh();
+}
+async function refresh(){
+  const d = await api('/api/dashboard');
+  document.getElementById('poolStat').textContent =
+    `共 ${d.pool.total} 个，可用 ${d.pool.callable}，在途 ${d.pool.inflight}`;
+  document.getElementById('upstreamInfo').textContent = d.upstream || '-';
+  document.getElementById('solverInfo').textContent = d.solver || '-';
+  const q = d.quota || {};
+  document.getElementById('sumTotal').textContent = fmt(q.total_tokens);
+  document.getElementById('sumRemain').textContent = fmt(q.remain_tokens);
+  document.getElementById('sumUsed').textContent = fmt(q.used_tokens);
+  document.getElementById('sumCredit').textContent = '$'+ (q.credits_total||0).toLocaleString() + '（已用 $'+(q.credits_used||0).toLocaleString()+'）';
+  const tb = document.getElementById('rows'); tb.innerHTML='';
+  (d.accounts||[]).forEach(a=>{
+    const tr = document.createElement('tr');
+    const today = new Date().toISOString().slice(0,10);
+    const ci = a.last_checkin ? Object.entries(a.last_checkin).map(([k,v])=>{
+      const isToday = v.slice(0,10)===today;
+      const nm = k==='slot_a'?'定向':(k==='slot_b'?'总量':k);
+      return `<span class="slot">${nm}: <b style="color:${isToday?'#4ade80':'#64748b'}">${isToday?'✓ 已领':fmtTime(v)}</b></span>`;
+    }).join('<br>') : '<span class="slot">未签到</span>';
+    let qh = '-';
+    if (a.quota) {
+      const qq = a.quota;
+      const packs = (qq.packs||[]).map(p=>`<div class="pack">${p.label}: ${fmt(p.used)}/${fmt(p.quota)} (${p.pct}%)</div>`).join('');
+      qh = `<div class="q"><span class="used">已用 ${fmt(qq.used_tokens)}</span><br><span class="remain">剩余 ${fmt(qq.remain_tokens)}</span> / ${fmt(qq.total_tokens)}${qq.credits_quota?`<br><span class="credit">$${(qq.credits_used||0).toLocaleString()} / $${(qq.credits_quota||0).toLocaleString()}</span>`:''}${packs}<span class="credit">${fmtTime(qq.fetched_at)}</span></div>`;
+    }
+    tr.innerHTML = `<td>${a.email}</td>
+      <td><span class="badge ${a.status}">${a.status}</span></td>
+      <td>${a.has_apikey ? a.apikey_masked : '<i>无</i>'}</td>
+      <td>${qh}</td>
+      <td style="font-size:11px">${ci}</td>
+      <td>${a.success_count||0}/${a.fail_count||0}</td>
+      <td>
+        <button class="ghost" onclick="checkinOne('${a.id}',this)">签到</button>
+        <button class="ghost" onclick="refreshQuota('${a.id}',this)">刷额度</button>
+        <button class="danger" onclick="delOne('${a.id}')">删除</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+  refreshKeys();
+  refreshStats();
+}
+async function refreshKeys(){
+  const d = await api('/api/keys');
+  const tb = document.getElementById('keyRows'); tb.innerHTML='';
+  (d.keys||[]).forEach(k=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${k.name}</td>
+      <td class="mono" style="font-size:11px">${k.prefix}</td>
+      <td><span class="badge ${k.enabled?'active':'error'}" style="cursor:pointer" onclick="toggleKey('${k.id}')">${k.enabled?'启用':'停用'}</span></td>
+      <td>${fmt(k.requests)}</td>
+      <td style="font-size:11px">${fmt(k.tokens_in)} / ${fmt(k.tokens_out)}</td>
+      <td style="font-size:11px">${fmtTime(k.created_at)}</td>
+      <td><button class="danger" onclick="delKey('${k.id}')">删除</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+async function createKey(){
+  const name = document.getElementById('keyName').value.trim();
+  if (!name) { alert('请填写备注名'); return; }
+  const secret = document.getElementById('keySecret').value.trim();
+  try {
+    const r = await api('/api/keys', {method:'POST', body: JSON.stringify({name, secret})});
+    document.getElementById('keyMsg').textContent = `已创建「${r.name}」\n完整 Key（仅此一次显示，请立即保存）：\n${r.secret}`;
+    document.getElementById('keyName').value='';
+    document.getElementById('keySecret').value='';
+    refreshKeys();
+  } catch(e){ alert('创建失败: '+e.message); }
+}
+async function delKey(id){
+  if (!confirm('删除后调用方将立即失去访问权限，确认删除？')) return;
+  await api('/api/keys/'+id, {method:'DELETE'});
+  refreshKeys();
+}
+async function toggleKey(id){
+  await api('/api/keys/'+id+'/toggle', {method:'POST'});
+  refreshKeys();
+}
+async function refreshStats(){
+  const d = await api('/api/stats');
+  const t = d.total||{}, td = d.today||{};
+  document.getElementById('stTotalTok').textContent = fmt(t.tokens_total);
+  document.getElementById('stTodayTok').textContent = fmt(td.tokens_total);
+  document.getElementById('stTotalReq').textContent = fmt(t.requests);
+  document.getElementById('stTodayReq').textContent = fmt(td.requests);
+  const tb = document.getElementById('stDaily'); tb.innerHTML='';
+  (d.daily||[]).slice().reverse().forEach(row=>{
+    if (!row.requests && !row.tokens_total) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.date}</td><td>${fmt(row.requests)}</td><td>${fmt(row.tokens_in)}</td><td>${fmt(row.tokens_out)}</td><td>${fmt(row.tokens_total)}</td>`;
+    tb.appendChild(tr);
+  });
+  if (!tb.children.length) tb.innerHTML = '<tr><td colspan="5" style="color:#8fa0bf">暂无用量记录</td></tr>';
+}
+async function checkinOne(id, btn){
+  if (btn) { btn.disabled = true; btn.textContent = '领取中…'; }
+  try {
+    const r = await api('/api/accounts/'+id+'/checkin', {method:'POST'});
+    let msg = r.results.map(x=>{
+      const nm = x.slot_name || x.slot;
+      if (x.claimed) return `${nm}:✓已领(+${fmt(x.quota_after)})`;
+      if (x.already_done) return `${nm}:今日已领`;
+      if (x.skipped) return `${nm}:需人工(${x.error||''})`;
+      return `${nm}:✗ ${x.error||'失败'}`;
+    }).join('；');
+    alert(msg || '完成');
+    refresh();
+  } catch(e) { alert('签到失败: '+e.message); }
+  if (btn) { btn.disabled = false; btn.textContent = '签到'; }
+}
+async function refreshQuota(id, btn){
+  if (btn) { btn.disabled = true; btn.textContent = '查询中…'; }
+  try {
+    const r = await api('/api/accounts/'+id+'/quota', {method:'POST'});
+    if (r.quota) alert(`额度已刷新：剩余 ${fmt(r.quota.remain_tokens)} / ${fmt(r.quota.total_tokens)} tokens`);
+    refresh();
+  } catch(e){ alert('额度查询失败: '+e.message); }
+  if (btn) { btn.disabled = false; btn.textContent = '刷额度'; }
+}
+async function refreshAllQuota(){
+  const b = document.getElementById('btnQuota');
+  b.disabled = true; b.textContent = '刷新中…';
+  try {
+    await api('/api/quota/refresh', {method:'POST'});
+    b.textContent = '刷新中…（后台执行）';
+    setTimeout(()=>{ b.disabled=false; b.textContent='刷新全部额度'; refresh(); }, 8000);
+  } catch(e){ alert('触发失败: '+e.message); b.disabled=false; b.textContent='刷新全部额度'; }
+}
+async function delOne(id){
+  if (!confirm('确认删除该账号？')) return;
+  await api('/api/accounts/'+id, {method:'DELETE'});
+  refresh();
+}
+async function runCheckin(){
+  const b = document.getElementById('btnAll');
+  b.disabled = true; b.textContent = '签到中…（可能需要数分钟）';
+  try { await api('/api/checkin/run', {method:'POST'}); alert('全账号签到已触发，稍后刷新查看结果'); }
+  catch(e){ alert('触发失败: '+e.message); }
+  b.disabled = false; b.textContent = '立即签到（全账号）';
+}
+async function doImport(){
+  const text = document.getElementById('importText').value;
+  if (!text.trim()) return;
+  try {
+    const r = await api('/api/accounts/import', {method:'POST', body: JSON.stringify({text})});
+    document.getElementById('importMsg').textContent =
+      `新增 ${r.created}，重复 ${r.duplicates}，无效 ${r.invalid}` +
+      (r.results||[]).filter(x=>x.action==='error').map(x=>`\n错误行: ${x.line}`).join('');
+    refresh();
+  } catch(e){ document.getElementById('importMsg').textContent = '导入失败: '+e.message; }
+}
+// init
+(async function(){
+  try { await api('/api/dashboard'); document.getElementById('app').style.display='block'; refresh(); }
+  catch(_){ showLogin(); }
+})();
+</script>
+</body>
+</html>

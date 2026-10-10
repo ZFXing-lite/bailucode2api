@@ -1,0 +1,15 @@
+# 运行时数据（加密账号库，绝不入库）
+data/
+*.json.bak
+
+# 本地配置（含真实凭据）
+.env
+
+# Node
+scripts/node_modules/
+node_modules/
+
+# 构建产物
+bailucode2api
+bailucode2api-bin
+*.exe

@@ -1,0 +1,16 @@
+services:
+  bailucode2api:
+    # 全自动签到（Turnstile）请用 browser 镜像：
+    #   docker compose -f docker-compose.browser.yml up -d --build
+    build: .
+    container_name: bailucode2api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18790:18790"
+    env_file:
+      - .env
+    volumes:
+      - bailucode2api_data:/data
+
+volumes:
+  bailucode2api_data:

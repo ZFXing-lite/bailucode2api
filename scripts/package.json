@@ -1,0 +1,9 @@
+{
+  "name": "bailucode2api-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "claim_helper.js deps: puppeteer-core driving the system Chrome",
+  "dependencies": {
+    "puppeteer-core": "^25.13.0"
+  }
+}

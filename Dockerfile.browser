@@ -1,0 +1,29 @@
+# bailucode2api — browser-solver 镜像（内置 Chrome + Node + Xvfb，支持全自动 Turnstile 签到）
+# 构建: docker build -f Dockerfile.browser -t bailucode2api:browser .
+FROM golang:1.24-bookworm AS builder
+WORKDIR /app
+COPY go.mod go.sum* ./
+RUN go mod download 2>/dev/null || true
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /bailucode2api ./cmd/server
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium xvfb nodejs ca-certificates fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+RUN adduser --disabled-password --gecos "" --uid 10001 app
+WORKDIR /app
+COPY --from=builder /bailucode2api /app/bailucode2api
+COPY scripts/claim_helper.js /app/scripts/claim_helper.js
+# helper 依赖 puppeteer-core：无网络时可用离线 node_modules 挂载
+RUN cd /app/scripts \
+    && (npm install puppeteer-core --omit=dev 2>/dev/null || \
+        echo "offline: mount node_modules or pre-bundle scripts/node_modules") \
+    || true
+RUN mkdir -p /data && chown -R app:app /data /app
+USER app
+EXPOSE 18790
+ENV DATA_DIR=/data \
+    TURNSTILE_SOLVER=browser \
+    CHROME_PATH=/usr/bin/chromium
+ENTRYPOINT ["/app/bailucode2api"]

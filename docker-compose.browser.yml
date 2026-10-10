@@ -1,0 +1,20 @@
+services:
+  bailucode2api:
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    container_name: bailucode2api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18790:18790"
+    env_file:
+      - .env
+    environment:
+      TURNSTILE_SOLVER: browser
+    volumes:
+      - bailucode2api_data:/data
+      # 离线环境：宿主机预装 node_modules 后挂载
+      # - ./scripts/node_modules:/app/scripts/node_modules:ro
+
+volumes:
+  bailucode2api_data:
